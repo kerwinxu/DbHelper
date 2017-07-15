@@ -20,10 +20,42 @@ namespace Xuhengxiao.DbHelper
     /// <summary>  
     /// 数据访问抽象基础类  
     /// </summary>  
-    public  class DbHelperMySQL2
+    public class DbHelperMySQL2
     {
+
+
         //数据库连接字符串      
         public string connectionString { get; set; }
+
+        private MySqlConnection _conn;
+        /// <summary>
+        /// 这个作为全局的，避免多次连接,作为一个属性，好点。
+        /// </summary>
+        public MySqlConnection CONNECTION
+        {
+            get
+            {
+                if (_conn == null)
+                {
+                    _conn = new MySqlConnection(connectionString);
+                    _conn.Open();
+                }
+                else if (_conn.State == System.Data.ConnectionState.Closed)//关闭
+                {
+                    _conn.Open();
+                }
+                else if (_conn.State == System.Data.ConnectionState.Broken)//连接中断，
+                {
+                    _conn.Close();
+                    _conn.Open();
+                }
+                return _conn;
+            }
+            set
+            {
+                _conn = value;
+            }
+        }
 
         /// <summary>
         /// 构造函数只是设置连接字符串而已。
@@ -32,23 +64,35 @@ namespace Xuhengxiao.DbHelper
         public DbHelperMySQL2(string str_conn)
         {
             connectionString = str_conn;
+            //CONNECTION = new MySqlConnection(str_conn);//可以不在这里连接，
         }
 
         #region 公用方法  
+        /// <summary>
+        /// 关闭数据库连接。
+        /// </summary>
+        public void Close()
+        {
+            if (CONNECTION.State == ConnectionState.Open || CONNECTION.State == ConnectionState.Broken)
+            {
+                CONNECTION.Close();
+            }
+                
+        }
         /// <summary>  
         /// 得到最大值  
         /// </summary>  
         /// <param name="FieldName"></param>  
         /// <param name="TableName"></param>  
         /// <returns></returns>  
-        public  int GetMaxID(string FieldName, string TableName)
+        public int GetMaxID(string FieldName, string TableName)
         {
             string strsql = "select max(" + FieldName + ")+1 from " + TableName;
             object obj = ExecuteScalar(strsql);
-            //如果值为空，就返回1，否则就转换数据啦。
+            //如果值为空，就返回0，否则就转换数据啦。
             if (obj == null)
             {
-                return 1;
+                return 0;
             }
             else
             {
@@ -60,7 +104,7 @@ namespace Xuhengxiao.DbHelper
         /// </summary>  
         /// <param name="strSql"></param>  
         /// <returns></returns>  
-        public  bool Exists(string strSql)
+        public bool Exists(string strSql)
         {
             object obj = ExecuteScalar(strSql);
             int cmdresult;
@@ -89,7 +133,7 @@ namespace Xuhengxiao.DbHelper
         /// <param name="strSql"></param>  
         /// <param name="cmdParms"></param>  
         /// <returns></returns>  
-        public  bool Exists(string strSql, params MySqlParameter[] cmdParms)
+        public bool Exists(string strSql, params MySqlParameter[] cmdParms)
         {
             object obj = ExecuteScalar(strSql, cmdParms);
             int cmdresult;
@@ -119,52 +163,54 @@ namespace Xuhengxiao.DbHelper
         /// </summary>  
         /// <param name="SQLString">SQL语句</param>  
         /// <returns>影响的记录数</returns>  
-        public  int ExecuteNonQuery(string SQLString)
+        public int ExecuteNonQuery(string SQLString)
         {
-            //初始化连接
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
+
+
+            //初始化命令，用SQL语句和连接对象
+            using (MySqlCommand cmd = new MySqlCommand(SQLString, CONNECTION))
             {
-                //初始化命令，用SQL语句和连接对象
-                using (MySqlCommand cmd = new MySqlCommand(SQLString, connection))
+                try
                 {
-                    try
-                    {
-                        //连接数据库
-                        connection.Open();
-                        //运行SQL
-                        int rows = cmd.ExecuteNonQuery();
-                        return rows;
-                    }
-                    catch (MySql.Data.MySqlClient.MySqlException e)
-                    {
-                        //关闭数据库以及抛出异常
-                        connection.Close();
-                        throw e;
-                    }
+                    //运行SQL
+                    int rows = cmd.ExecuteNonQuery();
+                    return rows;
+                }
+                catch (MySql.Data.MySqlClient.MySqlException e)
+                {
+                    //关闭数据库以及抛出异常
+                    CONNECTION.Close();
+                    throw e;
                 }
             }
         }
 
-        public  int ExecuteSqlByTime(string SQLString, int Times)
+        /// <summary>
+        /// 执行sql，并设置等待时间。
+        /// </summary>
+        /// <param name="SQLString"></param>
+        /// <param name="Times"></param>
+        /// <returns></returns>
+        public int ExecuteSqlByTime(string SQLString, int Times)
         {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
+
+
+            using (MySqlCommand cmd = new MySqlCommand(SQLString, CONNECTION))
             {
-                using (MySqlCommand cmd = new MySqlCommand(SQLString, connection))
+                try
                 {
-                    try
-                    {
-                        connection.Open();
-                        cmd.CommandTimeout = Times;
-                        int rows = cmd.ExecuteNonQuery();
-                        return rows;
-                    }
-                    catch (MySql.Data.MySqlClient.MySqlException e)
-                    {
-                        connection.Close();
-                        throw e;
-                    }
+
+                    cmd.CommandTimeout = Times;
+                    int rows = cmd.ExecuteNonQuery();
+                    return rows;
+                }
+                catch (MySql.Data.MySqlClient.MySqlException e)
+                {
+                    CONNECTION.Close();
+                    throw e;
                 }
             }
+
         }
 
         #region 由于我没有oracle数据库，所以这个取消了。
@@ -283,38 +329,38 @@ namespace Xuhengxiao.DbHelper
         /// 执行多条SQL语句，实现数据库事务。  
         /// </summary>  
         /// <param name="SQLStringList">多条SQL语句</param>       
-        public  int ExecuteSqlTran(List<String> SQLStringList)
+        public int ExecuteSqlTran(List<String> SQLStringList)
         {
-            using (MySqlConnection conn = new MySqlConnection(connectionString))
+
+
+            using (MySqlCommand cmd = new MySqlCommand())
             {
-                using (MySqlCommand cmd = new MySqlCommand())
+
+                cmd.Connection = CONNECTION;
+                MySqlTransaction tx = CONNECTION.BeginTransaction();
+                cmd.Transaction = tx;
+                try
                 {
-                    conn.Open();
-                    cmd.Connection = conn;
-                    MySqlTransaction tx = conn.BeginTransaction();
-                    cmd.Transaction = tx;
-                    try
+                    int count = 0;
+                    for (int n = 0; n < SQLStringList.Count; n++)
                     {
-                        int count = 0;
-                        for (int n = 0; n < SQLStringList.Count; n++)
+                        string strsql = SQLStringList[n];
+                        if (strsql.Trim().Length > 1)
                         {
-                            string strsql = SQLStringList[n];
-                            if (strsql.Trim().Length > 1)
-                            {
-                                cmd.CommandText = strsql;
-                                count += cmd.ExecuteNonQuery();
-                            }
+                            cmd.CommandText = strsql;
+                            count += cmd.ExecuteNonQuery();
                         }
-                        tx.Commit();
-                        return count;
                     }
-                    catch
-                    {
-                        tx.Rollback();
-                        return 0;
-                    }
+                    tx.Commit();
+                    return count;
                 }
-                    
+                catch
+                {
+                    tx.Rollback();
+                    return 0;
+                }
+
+
             }
         }
         /// <summary>  
@@ -323,48 +369,148 @@ namespace Xuhengxiao.DbHelper
         /// <param name="SQLString">SQL语句</param>  
         /// <param name="content">参数内容,比如一个字段是格式复杂的文章，有特殊符号，可以通过这个方式添加</param>  
         /// <returns>影响的记录数</returns>  
-        public  int ExecuteNonQuery(string SQLString, string content)
+        public int ExecuteNonQuery(string SQLString, string content)
         {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
+
+
+            MySqlCommand cmd = new MySqlCommand(SQLString, CONNECTION);
+            MySql.Data.MySqlClient.MySqlParameter myParameter = new MySql.Data.MySqlClient.MySqlParameter("@content", SqlDbType.NText);
+            myParameter.Value = content;
+            cmd.Parameters.Add(myParameter);
+            try
             {
-                MySqlCommand cmd = new MySqlCommand(SQLString, connection);
-                MySql.Data.MySqlClient.MySqlParameter myParameter = new MySql.Data.MySqlClient.MySqlParameter("@content", SqlDbType.NText);
-                myParameter.Value = content;
-                cmd.Parameters.Add(myParameter);
+
+                int rows = cmd.ExecuteNonQuery();
+                return rows;
+            }
+            catch (MySql.Data.MySqlClient.MySqlException e)
+            {
+                CONNECTION.Close();
+                throw e;
+
+            }
+            finally
+            {
+                cmd.Dispose();
+
+            }
+
+        }
+        /// <summary>  
+        /// 执行带一个存储过程参数的的SQL语句。  
+        /// </summary>  
+        /// <param name="SQLString">SQL语句</param>  
+        /// <param name="content">参数内容,比如一个字段是格式复杂的文章，有特殊符号，可以通过这个方式添加</param>  
+        /// <returns>影响的记录数</returns>  
+        public object ExecuteSqlGet(string SQLString, string content)
+        {
+
+
+            MySqlCommand cmd = new MySqlCommand(SQLString, CONNECTION);
+            MySql.Data.MySqlClient.MySqlParameter myParameter = new MySql.Data.MySqlClient.MySqlParameter("@content", SqlDbType.NText);
+            myParameter.Value = content;
+            cmd.Parameters.Add(myParameter);
+            try
+            {
+                
+                object obj = cmd.ExecuteScalar();
+                if ((Object.Equals(obj, null)) || (Object.Equals(obj, System.DBNull.Value)))
+                {
+                    return null;
+                }
+                else
+                {
+                    return obj;
+                }
+            }
+            catch (MySql.Data.MySqlClient.MySqlException e)
+            {
+                CONNECTION.Close();
+
+                throw e;
+            }
+            finally
+            {
+                cmd.Dispose();
+
+            }
+
+        }
+        /// <summary>  
+        /// 向数据库里插入图像格式的字段(和上面情况类似的另一种实例)  
+        /// </summary>  
+        /// <param name="strSQL">SQL语句</param>  
+        /// <param name="fs">图像字节,数据库的字段类型为image的情况</param>  
+        /// <returns>影响的记录数</returns>  
+        public int ExecuteSqlInsertImg(string strSQL, byte[] fs)
+        {
+
+
+            MySqlCommand cmd = new MySqlCommand(strSQL, CONNECTION);
+            MySql.Data.MySqlClient.MySqlParameter myParameter = new MySql.Data.MySqlClient.MySqlParameter("@fs", SqlDbType.Image);
+            myParameter.Value = fs;
+            cmd.Parameters.Add(myParameter);
+            try
+            {
+                int rows = cmd.ExecuteNonQuery();
+                return rows;
+            }
+            catch (MySql.Data.MySqlClient.MySqlException e)
+            {
+                CONNECTION.Close();
+                throw e;
+            }
+            finally
+            {
+                cmd.Dispose();
+
+            }
+
+        }
+
+        /// <summary>  
+        /// 执行一条计算查询结果语句，只是返回第一列第一行的数据，返回查询结果（object）。  
+        /// </summary>  
+        /// <param name="SQLString">计算查询结果语句</param>  
+        /// <returns>查询结果（object）</returns>  
+        public object ExecuteScalar(string SQLString)
+        {
+
+
+            using (MySqlCommand cmd = new MySqlCommand(SQLString, CONNECTION))
+            {
                 try
                 {
-                    connection.Open();
-                    int rows = cmd.ExecuteNonQuery();
-                    return rows;
+                    object obj = cmd.ExecuteScalar();
+                    //得判断返回值
+                    if ((Object.Equals(obj, null)) || (Object.Equals(obj, System.DBNull.Value)))
+                    {
+                        return null;
+                    }
+                    else
+                    {
+                        return obj;
+                    }
                 }
                 catch (MySql.Data.MySqlClient.MySqlException e)
                 {
+                    CONNECTION.Close();
                     throw e;
                 }
-                finally
-                {
-                    cmd.Dispose();
-                    connection.Close();
-                }
             }
+
         }
-        /// <summary>  
-        /// 执行带一个存储过程参数的的SQL语句。  
-        /// </summary>  
-        /// <param name="SQLString">SQL语句</param>  
-        /// <param name="content">参数内容,比如一个字段是格式复杂的文章，有特殊符号，可以通过这个方式添加</param>  
-        /// <returns>影响的记录数</returns>  
-        public  object ExecuteSqlGet(string SQLString, string content)
+        public object ExecuteScalar(string SQLString, int Times)
         {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
+
+
+
+            using (MySqlCommand cmd = new MySqlCommand(SQLString, CONNECTION))
             {
-                MySqlCommand cmd = new MySqlCommand(SQLString, connection);
-                MySql.Data.MySqlClient.MySqlParameter myParameter = new MySql.Data.MySqlClient.MySqlParameter("@content", SqlDbType.NText);
-                myParameter.Value = content;
-                cmd.Parameters.Add(myParameter);
                 try
                 {
-                    connection.Open();
+                    
+                    cmd.CommandTimeout = Times;
                     object obj = cmd.ExecuteScalar();
                     if ((Object.Equals(obj, null)) || (Object.Equals(obj, System.DBNull.Value)))
                     {
@@ -377,132 +523,38 @@ namespace Xuhengxiao.DbHelper
                 }
                 catch (MySql.Data.MySqlClient.MySqlException e)
                 {
+                    CONNECTION.Close();
                     throw e;
                 }
-                finally
-                {
-                    cmd.Dispose();
-                    connection.Close();
-                }
             }
-        }
-        /// <summary>  
-        /// 向数据库里插入图像格式的字段(和上面情况类似的另一种实例)  
-        /// </summary>  
-        /// <param name="strSQL">SQL语句</param>  
-        /// <param name="fs">图像字节,数据库的字段类型为image的情况</param>  
-        /// <returns>影响的记录数</returns>  
-        public  int ExecuteSqlInsertImg(string strSQL, byte[] fs)
-        {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
-            {
-                MySqlCommand cmd = new MySqlCommand(strSQL, connection);
-                MySql.Data.MySqlClient.MySqlParameter myParameter = new MySql.Data.MySqlClient.MySqlParameter("@fs", SqlDbType.Image);
-                myParameter.Value = fs;
-                cmd.Parameters.Add(myParameter);
-                try
-                {
-                    connection.Open();
-                    int rows = cmd.ExecuteNonQuery();
-                    return rows;
-                }
-                catch (MySql.Data.MySqlClient.MySqlException e)
-                {
-                    throw e;
-                }
-                finally
-                {
-                    cmd.Dispose();
-                    connection.Close();
-                }
-            }
-        }
 
-        /// <summary>  
-        /// 执行一条计算查询结果语句，只是返回第一列第一行的数据，返回查询结果（object）。  
-        /// </summary>  
-        /// <param name="SQLString">计算查询结果语句</param>  
-        /// <returns>查询结果（object）</returns>  
-        public  object ExecuteScalar(string SQLString)
-        {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
-            {
-                using (MySqlCommand cmd = new MySqlCommand(SQLString, connection))
-                {
-                    try
-                    {
-                        connection.Open();
-                        object obj = cmd.ExecuteScalar();
-                        //得判断返回值
-                        if ((Object.Equals(obj, null)) || (Object.Equals(obj, System.DBNull.Value)))
-                        {
-                            return null;
-                        }
-                        else
-                        {
-                            return obj;
-                        }
-                    }
-                    catch (MySql.Data.MySqlClient.MySqlException e)
-                    {
-                        connection.Close();
-                        throw e;
-                    }
-                }
-            }
-        }
-        public  object ExecuteScalar(string SQLString, int Times)
-        {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
-            {
-                using (MySqlCommand cmd = new MySqlCommand(SQLString, connection))
-                {
-                    try
-                    {
-                        connection.Open();
-                        cmd.CommandTimeout = Times;
-                        object obj = cmd.ExecuteScalar();
-                        if ((Object.Equals(obj, null)) || (Object.Equals(obj, System.DBNull.Value)))
-                        {
-                            return null;
-                        }
-                        else
-                        {
-                            return obj;
-                        }
-                    }
-                    catch (MySql.Data.MySqlClient.MySqlException e)
-                    {
-                        connection.Close();
-                        throw e;
-                    }
-                }
-            }
         }
         /// <summary>  
         /// 执行查询语句，返回MySqlDataReader ( 注意：调用该方法后，一定要对MySqlDataReader进行Close )  
         /// </summary>  
         /// <param name="strSQL">查询语句</param>  
         /// <returns>MySqlDataReader</returns>  
-        public  MySqlDataReader ExecuteReader(string strSQL)
+        public MySqlDataReader ExecuteReader(string strSQL)
         {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
-            {
-                using (MySqlCommand cmd = new MySqlCommand(strSQL, connection))
-                {
-                    try
-                    {
-                        connection.Open();
-                        MySqlDataReader myReader = cmd.ExecuteReader(CommandBehavior.CloseConnection);
-                        return myReader;
-                    }
-                    catch (MySql.Data.MySqlClient.MySqlException e)
-                    {
 
-                        throw e;
-                    }
+
+
+            using (MySqlCommand cmd = new MySqlCommand(strSQL, CONNECTION))
+            {
+                try
+                {
+
+                    MySqlDataReader myReader = cmd.ExecuteReader(CommandBehavior.CloseConnection);
+                    return myReader;
+                }
+                catch (MySql.Data.MySqlClient.MySqlException e)
+                {
+                    CONNECTION.Close();
+
+                    throw e;
                 }
             }
+
 
 
         }
@@ -511,23 +563,24 @@ namespace Xuhengxiao.DbHelper
         /// </summary>  
         /// <param name="SQLString">查询语句</param>  
         /// <returns>DataSet</returns>  
-        public  DataTable ExecuteDataTable(string SQLString)
+        public DataTable ExecuteDataTable(string SQLString)
         {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
+
+
+            DataTable ds = new DataTable();
+            try
             {
-                DataTable ds = new DataTable();
-                try
-                {
-                    connection.Open();
-                    MySqlDataAdapter command = new MySqlDataAdapter(SQLString, connection);
-                    command.Fill(ds);
-                }
-                catch (MySql.Data.MySqlClient.MySqlException ex)
-                {
-                    throw new Exception(ex.Message);
-                }
-                return ds;
+
+                MySqlDataAdapter command = new MySqlDataAdapter(SQLString, CONNECTION);
+                command.Fill(ds);
             }
+            catch (MySql.Data.MySqlClient.MySqlException ex)
+            {
+                CONNECTION.Close();
+                throw new Exception(ex.Message);
+            }
+            return ds;
+
         }
 
         /// <summary>  
@@ -535,63 +588,66 @@ namespace Xuhengxiao.DbHelper
         /// </summary>  
         /// <param name="SQLString">查询语句</param>  
         /// <returns>DataSet</returns>  
-        public  DataSet ExecuteDataSet(string SQLString)
+        public DataSet ExecuteDataSet(string SQLString)
         {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
+
+
+
+            DataSet ds = new DataSet();
+            try
             {
-                DataSet ds = new DataSet();
-                try
-                {
-                    connection.Open();
-                    MySqlDataAdapter command = new MySqlDataAdapter(SQLString, connection);
-                    command.Fill(ds);
-                }
-                catch (MySql.Data.MySqlClient.MySqlException ex)
-                {
-                    throw new Exception(ex.Message);
-                }
-                return ds;
+
+                MySqlDataAdapter command = new MySqlDataAdapter(SQLString, CONNECTION);
+                command.Fill(ds);
             }
+            catch (MySql.Data.MySqlClient.MySqlException ex)
+            {
+                CONNECTION.Close();
+                throw new Exception(ex.Message);
+            }
+            return ds;
+
         }
-        public  DataTable ExecuteDataTable(string SQLString, int Times)
+        public DataTable ExecuteDataTable(string SQLString, int Times)
         {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
+
+
+            DataTable ds = new DataTable();
+            try
             {
-                DataTable ds = new DataTable();
-                try
-                {
-                    connection.Open();
-                    MySqlDataAdapter command = new MySqlDataAdapter(SQLString, connection);
-                    command.SelectCommand.CommandTimeout = Times;
-                    command.Fill(ds);
-                }
-                catch (MySql.Data.MySqlClient.MySqlException ex)
-                {
-                    throw new Exception(ex.Message);
-                }
-                return ds;
+
+                MySqlDataAdapter command = new MySqlDataAdapter(SQLString, CONNECTION);
+                command.SelectCommand.CommandTimeout = Times;
+                command.Fill(ds);
             }
+            catch (MySql.Data.MySqlClient.MySqlException ex)
+            {
+                CONNECTION.Close();
+                throw new Exception(ex.Message);
+            }
+            return ds;
+
         }
 
-        public  DataSet ExecuteDataSet(string SQLString, int Times)
+        public DataSet ExecuteDataSet(string SQLString, int Times)
         {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
+
+            DataSet ds = new DataSet();
+            try
             {
-                DataSet ds = new DataSet();
-                try
-                {
-                    connection.Open();
-                    MySqlDataAdapter command = new MySqlDataAdapter(SQLString, connection);
-                    command.SelectCommand.CommandTimeout = Times;
-                    command.Fill(ds);
-                }
-                catch (MySql.Data.MySqlClient.MySqlException ex)
-                {
-                    throw new Exception(ex.Message);
-                }
-                return ds;
+
+                MySqlDataAdapter command = new MySqlDataAdapter(SQLString, CONNECTION);
+                command.SelectCommand.CommandTimeout = Times;
+                command.Fill(ds);
             }
+            catch (MySql.Data.MySqlClient.MySqlException ex)
+            {
+                CONNECTION.Close();
+                throw new Exception(ex.Message);
+            }
+            return ds;
         }
+
 
 
 
@@ -604,25 +660,31 @@ namespace Xuhengxiao.DbHelper
         /// </summary>  
         /// <param name="SQLString">SQL语句</param>  
         /// <returns>影响的记录数</returns>  
-        public  int ExecuteNonQuery(string SQLString, params MySqlParameter[] cmdParms)
+        public int ExecuteNonQuery(string SQLString, params MySqlParameter[] cmdParms)
         {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
+
+
+            using (MySqlCommand cmd = new MySqlCommand())
             {
-                using (MySqlCommand cmd = new MySqlCommand())
+
+                try
                 {
-                    try
-                    {
-                        PrepareCommand(cmd, connection, null, SQLString, cmdParms);
-                        int rows = cmd.ExecuteNonQuery();
-                        cmd.Parameters.Clear();
-                        return rows;
-                    }
-                    catch (MySql.Data.MySqlClient.MySqlException e)
-                    {
-                        throw e;
-                    }
+                    PrepareCommand(cmd, CONNECTION, null, SQLString, cmdParms);
+                    int rows = cmd.ExecuteNonQuery();
+
+                    return rows;
+                }
+                catch (MySql.Data.MySqlClient.MySqlException e)
+                {
+                    CONNECTION.Close();
+                    throw e;
+                }
+                finally
+                {
+                    cmd.Parameters.Clear();//参数清零
                 }
             }
+
         }
 
 
@@ -630,232 +692,264 @@ namespace Xuhengxiao.DbHelper
         /// 执行多条SQL语句，实现数据库事务。  
         /// </summary>  
         /// <param name="SQLStringList">SQL语句的哈希表（key为sql语句，value是该语句的MySqlParameter[]）</param>  
-        public  void ExecuteSqlTran(Hashtable SQLStringList)
+        public void ExecuteSqlTran(Hashtable SQLStringList)
         {
-            using (MySqlConnection conn = new MySqlConnection(connectionString))
+
+
+
+
+            using (MySqlTransaction trans = CONNECTION.BeginTransaction())
             {
-                conn.Open();
-                using (MySqlTransaction trans = conn.BeginTransaction())
+                MySqlCommand cmd = new MySqlCommand();
+
+                try
                 {
-                    MySqlCommand cmd = new MySqlCommand();
-                    try
+                    //循环  
+                    foreach (DictionaryEntry myDE in SQLStringList)
                     {
-                        //循环  
-                        foreach (DictionaryEntry myDE in SQLStringList)
-                        {
-                            string cmdText = myDE.Key.ToString();
-                            MySqlParameter[] cmdParms = (MySqlParameter[])myDE.Value;
-                            PrepareCommand(cmd, conn, trans, cmdText, cmdParms);
-                            int val = cmd.ExecuteNonQuery();
-                            cmd.Parameters.Clear();
-                        }
-                        trans.Commit();
+                        string cmdText = myDE.Key.ToString();
+                        MySqlParameter[] cmdParms = (MySqlParameter[])myDE.Value;
+                        PrepareCommand(cmd, CONNECTION, trans, cmdText, cmdParms);
+                        int val = cmd.ExecuteNonQuery();
+
                     }
-                    catch
-                    {
-                        trans.Rollback();
-                        throw;
-                    }
+                    trans.Commit();
+                }
+                catch (MySql.Data.MySqlClient.MySqlException e)
+                {
+
+                    trans.Rollback();
+                    CONNECTION.Close();
+                    throw e;
+                }
+                finally
+                {
+                    cmd.Parameters.Clear();//参数清零
                 }
             }
+
         }
         /// <summary>  
         /// 执行多条SQL语句，实现数据库事务。  
         /// </summary>  
         /// <param name="SQLStringList">SQL语句的哈希表（key为sql语句，value是该语句的MySqlParameter[]）</param>  
-        public  int ExecuteSqlTran(System.Collections.Generic.List<CommandInfo> cmdList)
+        public int ExecuteSqlTran(System.Collections.Generic.List<CommandInfo> cmdList)
         {
-            using (MySqlConnection conn = new MySqlConnection(connectionString))
+
+
+
+            using (MySqlTransaction trans = CONNECTION.BeginTransaction())
             {
-                conn.Open();
-                using (MySqlTransaction trans = conn.BeginTransaction())
+                MySqlCommand cmd = new MySqlCommand();
+
+                try
                 {
-                    MySqlCommand cmd = new MySqlCommand();
-                    try
+                    int count = 0;
+                    //循环  
+                    foreach (CommandInfo myDE in cmdList)
                     {
-                        int count = 0;
-                        //循环  
-                        foreach (CommandInfo myDE in cmdList)
+                        string cmdText = myDE.CommandText;
+                        MySqlParameter[] cmdParms = (MySqlParameter[])myDE.Parameters;
+                        PrepareCommand(cmd, CONNECTION, trans, cmdText, cmdParms);
+
+                        if (myDE.EffentNextType == EffentNextType.WhenHaveContine || myDE.EffentNextType == EffentNextType.WhenNoHaveContine)
                         {
-                            string cmdText = myDE.CommandText;
-                            MySqlParameter[] cmdParms = (MySqlParameter[])myDE.Parameters;
-                            PrepareCommand(cmd, conn, trans, cmdText, cmdParms);
-
-                            if (myDE.EffentNextType == EffentNextType.WhenHaveContine || myDE.EffentNextType == EffentNextType.WhenNoHaveContine)
-                            {
-                                if (myDE.CommandText.ToLower().IndexOf("count(") == -1)
-                                {
-                                    trans.Rollback();
-                                    return 0;
-                                }
-
-                                object obj = cmd.ExecuteScalar();
-                                bool isHave = false;
-                                if (obj == null && obj == DBNull.Value)
-                                {
-                                    isHave = false;
-                                }
-                                isHave = Convert.ToInt32(obj) > 0;
-
-                                if (myDE.EffentNextType == EffentNextType.WhenHaveContine && !isHave)
-                                {
-                                    trans.Rollback();
-                                    return 0;
-                                }
-                                if (myDE.EffentNextType == EffentNextType.WhenNoHaveContine && isHave)
-                                {
-                                    trans.Rollback();
-                                    return 0;
-                                }
-                                continue;
-                            }
-                            int val = cmd.ExecuteNonQuery();
-                            count += val;
-                            if (myDE.EffentNextType == EffentNextType.ExcuteEffectRows && val == 0)
+                            if (myDE.CommandText.ToLower().IndexOf("count(") == -1)
                             {
                                 trans.Rollback();
                                 return 0;
                             }
-                            cmd.Parameters.Clear();
+
+                            object obj = cmd.ExecuteScalar();
+                            bool isHave = false;
+                            if (obj == null && obj == DBNull.Value)
+                            {
+                                isHave = false;
+                            }
+                            isHave = Convert.ToInt32(obj) > 0;
+
+                            if (myDE.EffentNextType == EffentNextType.WhenHaveContine && !isHave)
+                            {
+                                trans.Rollback();
+                                return 0;
+                            }
+                            if (myDE.EffentNextType == EffentNextType.WhenNoHaveContine && isHave)
+                            {
+                                trans.Rollback();
+                                return 0;
+                            }
+                            continue;
                         }
-                        trans.Commit();
-                        return count;
+                        int val = cmd.ExecuteNonQuery();
+                        count += val;
+                        if (myDE.EffentNextType == EffentNextType.ExcuteEffectRows && val == 0)
+                        {
+                            trans.Rollback();
+                            return 0;
+                        }
+
                     }
-                    catch
-                    {
-                        trans.Rollback();
-                        throw;
-                    }
+                    trans.Commit();
+                    return count;
                 }
+                catch (MySql.Data.MySqlClient.MySqlException e)
+                {
+                    CONNECTION.Close();
+                    trans.Rollback();
+                    throw e;
+                }
+                finally
+                {
+                    cmd.Parameters.Clear();//首先参数清零
+                }
+
             }
         }
         /// <summary>  
         /// 执行多条SQL语句，实现数据库事务。  
         /// </summary>  
         /// <param name="SQLStringList">SQL语句的哈希表（key为sql语句，value是该语句的MySqlParameter[]）</param>  
-        public  void ExecuteSqlTranWithIndentity(System.Collections.Generic.List<CommandInfo> SQLStringList)
+        public void ExecuteSqlTranWithIndentity(System.Collections.Generic.List<CommandInfo> SQLStringList)
         {
-            using (MySqlConnection conn = new MySqlConnection(connectionString))
+
+
+         
+            using (MySqlTransaction trans = CONNECTION.BeginTransaction())
             {
-                conn.Open();
-                using (MySqlTransaction trans = conn.BeginTransaction())
+                MySqlCommand cmd = new MySqlCommand();
+
+                try
                 {
-                    MySqlCommand cmd = new MySqlCommand();
-                    try
+                    int indentity = 0;
+                    //循环  
+                    foreach (CommandInfo myDE in SQLStringList)
                     {
-                        int indentity = 0;
-                        //循环  
-                        foreach (CommandInfo myDE in SQLStringList)
+                        string cmdText = myDE.CommandText;
+                        MySqlParameter[] cmdParms = (MySqlParameter[])myDE.Parameters;
+                        foreach (MySqlParameter q in cmdParms)
                         {
-                            string cmdText = myDE.CommandText;
-                            MySqlParameter[] cmdParms = (MySqlParameter[])myDE.Parameters;
-                            foreach (MySqlParameter q in cmdParms)
+                            if (q.Direction == ParameterDirection.InputOutput)
                             {
-                                if (q.Direction == ParameterDirection.InputOutput)
-                                {
-                                    q.Value = indentity;
-                                }
+                                q.Value = indentity;
                             }
-                            PrepareCommand(cmd, conn, trans, cmdText, cmdParms);
-                            int val = cmd.ExecuteNonQuery();
-                            foreach (MySqlParameter q in cmdParms)
-                            {
-                                if (q.Direction == ParameterDirection.Output)
-                                {
-                                    indentity = Convert.ToInt32(q.Value);
-                                }
-                            }
-                            cmd.Parameters.Clear();
                         }
-                        trans.Commit();
+                        PrepareCommand(cmd, CONNECTION, trans, cmdText, cmdParms);
+                        int val = cmd.ExecuteNonQuery();
+                        foreach (MySqlParameter q in cmdParms)
+                        {
+                            if (q.Direction == ParameterDirection.Output)
+                            {
+                                indentity = Convert.ToInt32(q.Value);
+                            }
+                        }
+
                     }
-                    catch
-                    {
-                        trans.Rollback();
-                        throw;
-                    }
+                    trans.Commit();
+                }
+                catch (MySql.Data.MySqlClient.MySqlException e)
+                {
+                    trans.Rollback();
+                    CONNECTION.Close();
+                    throw e;
+                }
+                finally
+                {
+                    cmd.Parameters.Clear();//参数清零，为了下一次节约利用。
                 }
             }
+
         }
         /// <summary>  
         /// 执行多条SQL语句，实现数据库事务。  
         /// </summary>  
         /// <param name="SQLStringList">SQL语句的哈希表（key为sql语句，value是该语句的MySqlParameter[]）</param>  
-        public  void ExecuteSqlTranWithIndentity(Hashtable SQLStringList)
+        public void ExecuteSqlTranWithIndentity(Hashtable SQLStringList)
         {
-            using (MySqlConnection conn = new MySqlConnection(connectionString))
+
+           
+            using (MySqlTransaction trans = CONNECTION.BeginTransaction())
             {
-                conn.Open();
-                using (MySqlTransaction trans = conn.BeginTransaction())
+                MySqlCommand cmd = new MySqlCommand();
+
+                try
                 {
-                    MySqlCommand cmd = new MySqlCommand();
-                    try
+                    int indentity = 0;
+                    //循环  
+                    foreach (DictionaryEntry myDE in SQLStringList)
                     {
-                        int indentity = 0;
-                        //循环  
-                        foreach (DictionaryEntry myDE in SQLStringList)
+                        string cmdText = myDE.Key.ToString();
+                        MySqlParameter[] cmdParms = (MySqlParameter[])myDE.Value;
+                        foreach (MySqlParameter q in cmdParms)
                         {
-                            string cmdText = myDE.Key.ToString();
-                            MySqlParameter[] cmdParms = (MySqlParameter[])myDE.Value;
-                            foreach (MySqlParameter q in cmdParms)
+                            if (q.Direction == ParameterDirection.InputOutput)
                             {
-                                if (q.Direction == ParameterDirection.InputOutput)
-                                {
-                                    q.Value = indentity;
-                                }
+                                q.Value = indentity;
                             }
-                            PrepareCommand(cmd, conn, trans, cmdText, cmdParms);
-                            int val = cmd.ExecuteNonQuery();
-                            foreach (MySqlParameter q in cmdParms)
-                            {
-                                if (q.Direction == ParameterDirection.Output)
-                                {
-                                    indentity = Convert.ToInt32(q.Value);
-                                }
-                            }
-                            cmd.Parameters.Clear();
                         }
-                        trans.Commit();
+                        PrepareCommand(cmd, CONNECTION, trans, cmdText, cmdParms);
+                        int val = cmd.ExecuteNonQuery();
+                        foreach (MySqlParameter q in cmdParms)
+                        {
+                            if (q.Direction == ParameterDirection.Output)
+                            {
+                                indentity = Convert.ToInt32(q.Value);
+                            }
+                        }
+
                     }
-                    catch
-                    {
-                        trans.Rollback();
-                        throw;
-                    }
+                    trans.Commit();
+                }
+                catch (MySql.Data.MySqlClient.MySqlException e)
+                {
+                    CONNECTION.Close();
+                    trans.Rollback();
+                    throw e;
+                }
+                finally
+                {
+                    cmd.Parameters.Clear();//参数清零，为了下一次节约利用。
                 }
             }
+
         }
         /// <summary>  
         /// 执行一条计算查询结果语句，返回查询结果（object）。  
         /// </summary>  
         /// <param name="SQLString">计算查询结果语句</param>  
         /// <returns>查询结果（object）</returns>  
-        public  object ExecuteScalar(string SQLString, params MySqlParameter[] cmdParms)
+        public object ExecuteScalar(string SQLString, params MySqlParameter[] cmdParms)
         {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
+
+
+
+            using (MySqlCommand cmd = new MySqlCommand())
             {
-                using (MySqlCommand cmd = new MySqlCommand())
+
+                try
                 {
-                    try
+                    PrepareCommand(cmd, CONNECTION, null, SQLString, cmdParms);
+                    object obj = cmd.ExecuteScalar();
+
+                    if ((Object.Equals(obj, null)) || (Object.Equals(obj, System.DBNull.Value)))
                     {
-                        PrepareCommand(cmd, connection, null, SQLString, cmdParms);
-                        object obj = cmd.ExecuteScalar();
-                        cmd.Parameters.Clear();
-                        if ((Object.Equals(obj, null)) || (Object.Equals(obj, System.DBNull.Value)))
-                        {
-                            return null;
-                        }
-                        else
-                        {
-                            return obj;
-                        }
+                        return null;
                     }
-                    catch (MySql.Data.MySqlClient.MySqlException e)
+                    else
                     {
-                        throw e;
+                        return obj;
                     }
                 }
+                catch (MySql.Data.MySqlClient.MySqlException e)
+                {
+                    CONNECTION.Close();
+                    throw e;
+                }
+                finally
+                {
+                    cmd.Parameters.Clear();//参数清零，为了下一次节约利用。
+                }
             }
+
         }
 
         /// <summary>  
@@ -863,26 +957,30 @@ namespace Xuhengxiao.DbHelper
         /// </summary>  
         /// <param name="strSQL">查询语句</param>  
         /// <returns>MySqlDataReader</returns>  
-        public  MySqlDataReader ExecuteReader(string SQLString, params MySqlParameter[] cmdParms)
+        public MySqlDataReader ExecuteReader(string SQLString, params MySqlParameter[] cmdParms)
         {
-            MySqlConnection connection = new MySqlConnection(connectionString);
+
+
             MySqlCommand cmd = new MySqlCommand();
+
             try
             {
-                PrepareCommand(cmd, connection, null, SQLString, cmdParms);
+                PrepareCommand(cmd, CONNECTION, null, SQLString, cmdParms);
                 MySqlDataReader myReader = cmd.ExecuteReader(CommandBehavior.CloseConnection);
-                cmd.Parameters.Clear();
+
                 return myReader;
             }
             catch (MySql.Data.MySqlClient.MySqlException e)
             {
+                CONNECTION.Close();
                 throw e;
             }
-            //          finally  
-            //          {  
-            //              cmd.Dispose();  
-            //              connection.Close();  
-            //          }     
+            finally
+            {
+
+                cmd.Parameters.Clear();
+                cmd.Dispose();
+            }
 
         }
 
@@ -891,27 +989,32 @@ namespace Xuhengxiao.DbHelper
         /// </summary>  
         /// <param name="SQLString">查询语句</param>  
         /// <returns>DataSet</returns>  
-        public  DataTable  ExecuteDataTable(string SQLString, params MySqlParameter[] cmdParms)
+        public DataTable ExecuteDataTable(string SQLString, params MySqlParameter[] cmdParms)
         {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
+
+
+            MySqlCommand cmd = new MySqlCommand();
+            PrepareCommand(cmd, CONNECTION, null, SQLString, cmdParms);
+            using (MySqlDataAdapter da = new MySqlDataAdapter(cmd))
             {
-                MySqlCommand cmd = new MySqlCommand();
-                PrepareCommand(cmd, connection, null, SQLString, cmdParms);
-                using (MySqlDataAdapter da = new MySqlDataAdapter(cmd))
+                DataTable ds = new DataTable();
+                try
                 {
-                    DataTable ds = new DataTable();
-                    try
-                    {
-                        da.Fill(ds);
-                        cmd.Parameters.Clear();
-                    }
-                    catch (MySql.Data.MySqlClient.MySqlException ex)
-                    {
-                        throw new Exception(ex.Message);
-                    }
-                    return ds;
+                    da.Fill(ds);
+
                 }
+                catch (MySql.Data.MySqlClient.MySqlException ex)
+                {
+                    CONNECTION.Close();
+                    throw new Exception(ex.Message);
+                }
+                finally
+                {
+                    cmd.Parameters.Clear();//参数清零，为了下一次节约利用。
+                }
+                return ds;
             }
+
         }
 
         /// <summary>  
@@ -919,27 +1022,34 @@ namespace Xuhengxiao.DbHelper
         /// </summary>  
         /// <param name="SQLString">查询语句</param>  
         /// <returns>DataSet</returns>  
-        public  DataSet ExecuteDataSet(string SQLString, params MySqlParameter[] cmdParms)
+        public DataSet ExecuteDataSet(string SQLString, params MySqlParameter[] cmdParms)
         {
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
+
+
+
+            MySqlCommand cmd = new MySqlCommand();
+
+            PrepareCommand(cmd, CONNECTION, null, SQLString, cmdParms);
+            using (MySqlDataAdapter da = new MySqlDataAdapter(cmd))
             {
-                MySqlCommand cmd = new MySqlCommand();
-                PrepareCommand(cmd, connection, null, SQLString, cmdParms);
-                using (MySqlDataAdapter da = new MySqlDataAdapter(cmd))
+                DataSet ds = new DataSet();
+                try
                 {
-                    DataSet ds = new DataSet();
-                    try
-                    {
-                        da.Fill(ds);
-                        cmd.Parameters.Clear();
-                    }
-                    catch (MySql.Data.MySqlClient.MySqlException ex)
-                    {
-                        throw new Exception(ex.Message);
-                    }
-                    return ds;
+                    da.Fill(ds);
+
                 }
+                catch (MySql.Data.MySqlClient.MySqlException ex)
+                {
+                    CONNECTION.Close();
+                    throw new Exception(ex.Message);
+                }
+                finally
+                {
+                    cmd.Parameters.Clear();//参数清零，为了下一次节约利用。
+                }
+                return ds;
             }
+
         }
 
         /// <summary>
@@ -950,7 +1060,7 @@ namespace Xuhengxiao.DbHelper
         /// <param name="trans"></param>
         /// <param name="strSQL"></param>
         /// <param name="cmdParms"></param>
-        private  void PrepareCommand(MySqlCommand cmd, MySqlConnection conn, MySqlTransaction trans, string strSQL, MySqlParameter[] cmdParms)
+        private void PrepareCommand(MySqlCommand cmd, MySqlConnection conn, MySqlTransaction trans, string strSQL, MySqlParameter[] cmdParms)
         {
             //如果不是打开状态，就打开连接。
             if (conn.State != ConnectionState.Open)
@@ -990,10 +1100,10 @@ namespace Xuhengxiao.DbHelper
         /// </summary>  
         /// <param name="db">数据库的名称</param>  
         /// <returns>true:表示数据库已经存在；false，表示数据库不存在</returns>  
-        public   Boolean IsDBExist(string db)
+        public Boolean IsDBExist(string db)
         {
             //SELECT * FROM information_schema.SCHEMATA where SCHEMA_NAME='aa';
-            string createDbStr = "SELECT * FROM information_schema.SCHEMATA where SCHEMA_NAME='"+ db + "';";
+            string createDbStr = "SELECT * FROM information_schema.SCHEMATA where SCHEMA_NAME='" + db + "';";
 
             DataTable dt = ExecuteDataTable(createDbStr);
             if (dt.Rows.Count == 0)
@@ -1014,7 +1124,7 @@ namespace Xuhengxiao.DbHelper
         /// <param name="db">数据库</param>  
         /// <param name="tb">数据表名</param>  
         /// <returns>true:表示数据表已经存在；false，表示数据表不存在</returns>  
-        public   Boolean IsTableExist(string db, string tb)
+        public Boolean IsTableExist(string db, string tb)
         {
             //在指定的数据库中  查找 该表是否存在 
             // use business_one;

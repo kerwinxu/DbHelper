@@ -67,10 +67,14 @@ namespace TestDbHelperMySQL
         {
             DbHelperMySQL2 db = new DbHelperMySQL2("Server=localhost;Database=business_one; Uid=business;Pwd=nicaibudaola111;");
 
+            //先删除这个表
+            string str_table_name = "test2017061301";
+            db.ExecuteNonQuery("DROP TABLE IF EXISTS " + str_table_name + ";");
+
             Dictionary<string, string> dict = new Dictionary<string, string>();
             dict.Add("姓名", "VARCHAR(200)");
-            db.CreateDataTable("business_one", "test2017061301", dict);
-            dataGridView1.DataSource = db.ExecuteDataTable("use business_one;select * from test2017061301");
+            db.CreateDataTable("business_one", str_table_name, dict);
+            dataGridView1.DataSource = db.ExecuteDataTable("use business_one;select * from "+ str_table_name);
         }
 
         private void button4_Click(object sender, EventArgs e)
