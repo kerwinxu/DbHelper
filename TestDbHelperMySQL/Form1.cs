@@ -65,8 +65,8 @@ namespace TestDbHelperMySQL
 
         private void button3_Click(object sender, EventArgs e)
         {
-            DbHelperMySQL2 db = new DbHelperMySQL2("Server=localhost;Database=business_one; Uid=business;Pwd=nicaibudaola111;");
-
+            //DbHelperMySQL2 db = new DbHelperMySQL2("Server=localhost;Database=business_one; Uid=business;Pwd=nicaibudaola111;");
+            DbHelperMySQL2 db = new DbHelperMySQL2("localhost","business_one","business", "nicaibudaola111");
             //先删除这个表
             string str_table_name = "test2017061301";
             db.ExecuteNonQuery("DROP TABLE IF EXISTS " + str_table_name + ";");
