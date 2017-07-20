@@ -13,6 +13,9 @@ namespace TestDbHelperMySQL
 {
     public partial class Form1 : Form
     {
+        //很多表都拿这个来做处理。
+        string str_table_name = "test2017061301";
+
         public Form1()
         {
             InitializeComponent();
@@ -68,7 +71,7 @@ namespace TestDbHelperMySQL
             //DbHelperMySQL2 db = new DbHelperMySQL2("Server=localhost;Database=business_one; Uid=business;Pwd=nicaibudaola111;");
             DbHelperMySQL2 db = new DbHelperMySQL2("localhost","business_one","business", "nicaibudaola111");
             //先删除这个表
-            string str_table_name = "test2017061301";
+
             db.ExecuteNonQuery("DROP TABLE IF EXISTS " + str_table_name + ";");
 
             Dictionary<string, string> dict = new Dictionary<string, string>();
@@ -81,7 +84,7 @@ namespace TestDbHelperMySQL
         {
             DbHelperMySQL2 db = new DbHelperMySQL2("Server=localhost;Database=business_one; Uid=business;Pwd=nicaibudaola111;");
             //先删除这个表
-            string str_table_name = "test2017061301";
+
             db.ExecuteNonQuery("DROP TABLE IF EXISTS " + str_table_name+";");
             //然后再新建表
             Dictionary<string, string> dict = new Dictionary<string, string>();
@@ -96,6 +99,42 @@ namespace TestDbHelperMySQL
             db.ExecuteNonQuery(sql_insert, par);
             //查看数据
             dataGridView1.DataSource = db.ExecuteDataTable("use business_one;select * from "+ str_table_name+";");
+        }
+
+        private MySqlDataAdapter MySqlDataAdapter_1;
+        private void button5_Click(object sender, EventArgs e)
+        {
+            //这个方法看看能够更新到数据库中的方法。
+            DbHelperMySQL2 db = new DbHelperMySQL2("Server=localhost;Database=business_one; Uid=business;Pwd=nicaibudaola111;");
+            //查看数据,并保存MySqlDataAdapter
+            dataGridView1.DataSource = db.ExecuteDataSet("use business_one;select * from " + str_table_name + ";",out MySqlDataAdapter_1).Tables[0];
+            
+            //添加InsertCommand
+            string str_insert_sql = "insert into "+str_table_name+ "(ID,姓名) values(@ID,@chinesename);";
+            MySqlDataAdapter_1.InsertCommand = new MySqlCommand(str_insert_sql, db.Connection);
+            MySqlDataAdapter_1.InsertCommand.Parameters.Add("@ID", MySqlDbType.Int64,20,"ID");
+            MySqlDataAdapter_1.InsertCommand.Parameters.Add("@chinesename", MySqlDbType.VarChar, 200, "姓名");
+
+            //添加UpdateCommand
+            string str_update_sql = "update " + str_table_name + " set 姓名=@chinesename where ID=@ID;";
+            MySqlDataAdapter_1.UpdateCommand = new MySqlCommand(str_update_sql, db.Connection);
+            MySqlDataAdapter_1.UpdateCommand.Parameters.Add("@ID", MySqlDbType.Int64, 20, "ID");
+            MySqlDataAdapter_1.UpdateCommand.Parameters.Add("@chinesename", MySqlDbType.VarChar, 200, "姓名");
+
+            //添加DeleteCommand
+            string str_delete_sql = "delete from "+str_table_name+ " where ID=@ID;";
+            MySqlDataAdapter_1.DeleteCommand = new MySqlCommand(str_delete_sql, db.Connection);
+            MySqlDataAdapter_1.DeleteCommand.Parameters.Add("@ID", MySqlDbType.Int64, 20, "ID");
+
+            bindingSource1.DataSource = dataGridView1.DataSource;
+
+        }
+
+        private void button6_Click(object sender, EventArgs e)
+        {
+            //失败了，得定义InsertCommand等等。
+            MySqlDataAdapter_1.Update((DataTable)dataGridView1.DataSource);
+
         }
     }
 }

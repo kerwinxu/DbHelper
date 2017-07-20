@@ -385,6 +385,32 @@ namespace Xuhengxiao.DbHelper
 
         }
 
+
+        /// <summary>
+        /// 执行sql语句，有超时时间，返回DataTable
+        /// </summary>
+        /// <param name="SQLString"></param>
+        /// <param name="adapter"></param>
+        /// <param name="Times">超时时间，默认30秒</param>
+        /// <returns></returns>
+        public DataTable ExecuteDataTable(string SQLString, out MySqlDataAdapter adapter, int Times = 30)
+        {
+            DataTable ds = new DataTable();
+            try
+            {
+
+                adapter = new MySqlDataAdapter(SQLString, Connection);
+                adapter.SelectCommand.CommandTimeout = Times;
+                adapter.Fill(ds);
+            }
+            catch (MySql.Data.MySqlClient.MySqlException ex)
+            {
+                Connection.Close();
+                throw new Exception(ex.Message);
+            }
+            return ds;
+
+        }
         /// <summary>
         /// 执行sql语句，有超时时间，返回DataSet
         /// </summary>
@@ -421,7 +447,6 @@ namespace Xuhengxiao.DbHelper
             DataSet ds = new DataSet();
             try
             {
-
                 adapter = new MySqlDataAdapter(SQLString, Connection);
                 adapter.SelectCommand.CommandTimeout = Times;
                 adapter.Fill(ds);
