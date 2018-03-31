@@ -10,6 +10,7 @@ using MySql.Data.MySqlClient;
 using System.Configuration;
 using System.Data.Common;
 using System.Collections.Generic;
+using System.Text;
 
 namespace Xuhengxiao.DbHelper
 {
@@ -302,8 +303,6 @@ namespace Xuhengxiao.DbHelper
         public object ExecuteScalar(string SQLString, int Times=30)
         {
 
-
-
             using (MySqlCommand cmd = new MySqlCommand(SQLString, Connection))
             {
                 try
@@ -344,7 +343,7 @@ namespace Xuhengxiao.DbHelper
             {
                 try
                 {
-
+                    
                     MySqlDataReader myReader = cmd.ExecuteReader(CommandBehavior.CloseConnection);
                     return myReader;
                 }
@@ -400,6 +399,7 @@ namespace Xuhengxiao.DbHelper
             {
 
                 adapter = new MySqlDataAdapter(SQLString, Connection);
+                adapter.UpdateBatchSize = 0;// 将 UpdateBatchSize 设置为 0 可使 DataAdapter 使用服务器能够处理的最大批大小。
                 adapter.SelectCommand.CommandTimeout = Times;
                 adapter.Fill(ds);
             }
@@ -448,6 +448,7 @@ namespace Xuhengxiao.DbHelper
             try
             {
                 adapter = new MySqlDataAdapter(SQLString, Connection);
+                adapter.UpdateBatchSize = 0;// 将 UpdateBatchSize 设置为 0 可使 DataAdapter 使用服务器能够处理的最大批大小。
                 adapter.SelectCommand.CommandTimeout = Times;
                 adapter.Fill(ds);
             }
@@ -471,7 +472,6 @@ namespace Xuhengxiao.DbHelper
         /// <returns>影响的记录数</returns>  
         public int ExecuteNonQuery(string SQLString, params MySqlParameter[] cmdParms)
         {
-
 
             using (MySqlCommand cmd = new MySqlCommand())
             {
@@ -539,23 +539,21 @@ namespace Xuhengxiao.DbHelper
         /// 执行多条SQL语句，实现数据库事务。  
         /// </summary>  
         /// <param name="SQLStringList">SQL语句的哈希表（key为sql语句，value是该语句的MySqlParameter[]）</param>  
-        public int ExecuteSqlTran(System.Collections.Generic.List<CommandInfo> cmdList)
+        public int ExecuteSqlTran(System.Collections.Generic.List<MysqlCommandInfo> cmdList)
         {
-
-
-
             using (MySqlTransaction trans = Connection.BeginTransaction())
             {
                 MySqlCommand cmd = new MySqlCommand();
+                cmd.CommandTimeout = 200;
 
                 try
                 {
                     int count = 0;
                     //循环  
-                    foreach (CommandInfo myDE in cmdList)
+                    foreach (MysqlCommandInfo myDE in cmdList)
                     {
                         string cmdText = myDE.CommandText;
-                        MySqlParameter[] cmdParms = (MySqlParameter[])myDE.Parameters;
+                        MySqlParameter[] cmdParms = myDE.Parameters;
                         PrepareCommand(cmd, Connection, trans, cmdText, cmdParms);
 
                         if (myDE.EffentNextType == EffentNextType.WhenHaveContine || myDE.EffentNextType == EffentNextType.WhenNoHaveContine)
@@ -600,8 +598,8 @@ namespace Xuhengxiao.DbHelper
                 }
                 catch (MySql.Data.MySqlClient.MySqlException e)
                 {
-                    Connection.Close();
                     trans.Rollback();
+                    Connection.Close();
                     throw e;
                 }
                 finally
@@ -880,6 +878,8 @@ namespace Xuhengxiao.DbHelper
             if (trans != null)
                 cmd.Transaction = trans;
             cmd.CommandType = CommandType.Text;//cmdType;  
+            //清空原先的参数。
+            cmd.Parameters.Clear();
             //如果参数数组不为空
             if (cmdParms != null)
             {
@@ -1023,6 +1023,39 @@ namespace Xuhengxiao.DbHelper
 
         #endregion
 
+        #region 执行一个SQL语句，返回字符串形式
+        public string ExecuteString(string sql)
+        {
+            //字符串是只读的，需要经常字符串连接，所以用这个。
+            StringBuilder stringbuilder_return = new StringBuilder();
+
+            //在这里用MysqlDataReader来操作
+            MySqlDataReader reader = ExecuteReader(sql);
+            int field_count = reader.FieldCount;//列的数量
+            //输出列名
+            for (int i = 0; i < field_count; i++)
+            {
+                stringbuilder_return.Append(reader.GetName(i));
+                stringbuilder_return.Append("\t");
+            }
+            stringbuilder_return.AppendLine();//相当于回车吧。
+            
+            //输出每行的信息。
+            while (reader.Read())
+            {
+                for (int i = 0; i < field_count; i++)
+                {
+                    stringbuilder_return.Append(reader[i].ToString());
+                    stringbuilder_return.Append("\t");
+                }
+                stringbuilder_return.AppendLine();//相当于回车吧。
+            }
+            reader.Close();//必须关闭
+            return stringbuilder_return.ToString();
+        }
+
+        #endregion
+
         #region 公用方法  包括得到最大值，是否存在之类的
 
         /// <summary>  
@@ -1102,5 +1135,47 @@ namespace Xuhengxiao.DbHelper
         }
         #endregion
 
+    }
+
+    public class MysqlCommandInfo
+    {
+        public object ShareObject = null;
+        public object OriginalData = null;
+        event EventHandler _solicitationEvent;
+        public event EventHandler SolicitationEvent
+        {
+            add
+            {
+                _solicitationEvent += value;
+            }
+            remove
+            {
+                _solicitationEvent -= value;
+            }
+        }
+        public void OnSolicitationEvent()
+        {
+            if (_solicitationEvent != null)
+            {
+                _solicitationEvent(this, new EventArgs());
+            }
+        }
+        public string CommandText;
+        public MySqlParameter [] Parameters;
+        public EffentNextType EffentNextType = EffentNextType.None;
+        public MysqlCommandInfo()
+        {
+        }
+        public MysqlCommandInfo(string sqlText, MySqlParameter[] para)
+        {
+            this.CommandText = sqlText;
+            this.Parameters = para;
+        }
+        public MysqlCommandInfo(string sqlText, MySqlParameter[] para, EffentNextType type)
+        {
+            this.CommandText = sqlText;
+            this.Parameters = para;
+            this.EffentNextType = type;
+        }
     }
 }

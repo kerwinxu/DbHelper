@@ -52,6 +52,7 @@
             this.bindingNavigatorAddNewItem = new System.Windows.Forms.ToolStripButton();
             this.bindingNavigatorDeleteItem = new System.Windows.Forms.ToolStripButton();
             this.bindingSource1 = new System.Windows.Forms.BindingSource(this.components);
+            this.button7 = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer1)).BeginInit();
             this.splitContainer1.Panel1.SuspendLayout();
             this.splitContainer1.Panel2.SuspendLayout();
@@ -79,7 +80,7 @@
             this.splitContainer1.Panel2.Controls.Add(this.bindingNavigator1);
             this.splitContainer1.Panel2.Controls.Add(this.dataGridView1);
             this.splitContainer1.Size = new System.Drawing.Size(962, 495);
-            this.splitContainer1.SplitterDistance = 43;
+            this.splitContainer1.SplitterDistance = 65;
             this.splitContainer1.TabIndex = 0;
             // 
             // flowLayoutPanel1
@@ -90,10 +91,11 @@
             this.flowLayoutPanel1.Controls.Add(this.button4);
             this.flowLayoutPanel1.Controls.Add(this.button5);
             this.flowLayoutPanel1.Controls.Add(this.button6);
+            this.flowLayoutPanel1.Controls.Add(this.button7);
             this.flowLayoutPanel1.Dock = System.Windows.Forms.DockStyle.Fill;
             this.flowLayoutPanel1.Location = new System.Drawing.Point(0, 0);
             this.flowLayoutPanel1.Name = "flowLayoutPanel1";
-            this.flowLayoutPanel1.Size = new System.Drawing.Size(962, 43);
+            this.flowLayoutPanel1.Size = new System.Drawing.Size(962, 65);
             this.flowLayoutPanel1.TabIndex = 0;
             // 
             // button1
@@ -162,7 +164,7 @@
             this.dataGridView1.Dock = System.Windows.Forms.DockStyle.Fill;
             this.dataGridView1.Location = new System.Drawing.Point(0, 0);
             this.dataGridView1.Name = "dataGridView1";
-            this.dataGridView1.Size = new System.Drawing.Size(962, 448);
+            this.dataGridView1.Size = new System.Drawing.Size(962, 426);
             this.dataGridView1.TabIndex = 0;
             // 
             // bindingNavigator1
@@ -279,6 +281,16 @@
             this.bindingNavigatorDeleteItem.Size = new System.Drawing.Size(23, 22);
             this.bindingNavigatorDeleteItem.Text = "删除";
             // 
+            // button7
+            // 
+            this.button7.Location = new System.Drawing.Point(3, 32);
+            this.button7.Name = "button7";
+            this.button7.Size = new System.Drawing.Size(211, 23);
+            this.button7.TabIndex = 6;
+            this.button7.Text = "测试能够更新的MySqlDataAdapter2";
+            this.button7.UseVisualStyleBackColor = true;
+            this.button7.Click += new System.EventHandler(this.button7_Click);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
@@ -326,6 +338,7 @@
         private System.Windows.Forms.ToolStripButton bindingNavigatorMoveLastItem;
         private System.Windows.Forms.ToolStripSeparator bindingNavigatorSeparator2;
         private System.Windows.Forms.BindingSource bindingSource1;
+        private System.Windows.Forms.Button button7;
     }
 }
 

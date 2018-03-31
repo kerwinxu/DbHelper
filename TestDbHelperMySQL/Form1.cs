@@ -136,5 +136,17 @@ namespace TestDbHelperMySQL
             MySqlDataAdapter_1.Update((DataTable)dataGridView1.DataSource);
 
         }
+
+        private void button7_Click(object sender, EventArgs e)
+        {
+            //这个方法看看能够更新到数据库中的方法。
+            DbHelperMySQL2 db = new DbHelperMySQL2("Server=localhost;Database=business_one; Uid=business;Pwd=nicaibudaola111;");
+            //查看数据,并保存MySqlDataAdapter
+            dataGridView1.DataSource = db.ExecuteDataTable("use business_one;select * from " + str_table_name + ";", out MySqlDataAdapter_1);
+            MySqlCommandBuilder cb = new MySqlCommandBuilder(MySqlDataAdapter_1);//增加了这个，就会自动生成UpdateCommand,InsertCommand,DeleteCommand，前提是表有主键。
+            //但这个方式，修改主键的情况下，不会更改到数据库中，估计原因是 "update 表 set 主键=新值 where 主键=新值",如果要修改主键，得另外做一个update，最好是单独的一个执行。
+            bindingSource1.DataSource = dataGridView1.DataSource;
+
+        }
     }
 }
